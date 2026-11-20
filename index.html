@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Arbitre de table</title>
+<!-- Bibliothèque officielle de Telegram pour les mini-applications -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Couleurs : celles de Telegram quand la page s'ouvre dans Telegram, sinon des valeurs de secours */
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #14181f);
+    --hint: var(--tg-theme-hint-color, #6b7280);
+    --card: var(--tg-theme-secondary-bg-color, #eef1f5);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --g: #1d4ed8;   /* joueur de gauche : bleu */
+    --d: #b45309;   /* joueur de droite : ambre */
+  }
+  html[data-scheme="dark"] { --g: #8ab4ff; --d: #f5a524; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.4;
+    -webkit-tap-highlight-color: transparent;
+    padding: 16px 16px 96px;
+    max-width: 520px; margin: 0 auto;
+  }
+  body.in-tg { padding-bottom: 24px; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  .sub { color: var(--hint); margin: 0 0 18px; font-size: 14px; }
+  label { display: block; font-size: 14px; color: var(--hint); margin: 14px 0 6px; }
+  input[type=text], select {
+    width: 100%; font: inherit; color: var(--text); background: var(--card);
+    border: 1px solid transparent; border-radius: 12px; padding: 12px 14px;
+  }
+  input[type=text]:focus, select:focus { outline: 2px solid var(--btn); outline-offset: 1px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span {
+    display: block; text-align: center; padding: 11px 8px; border-radius: 12px;
+    background: var(--card); cursor: pointer; font-size: 15px;
+  }
+  .seg input:checked + span { background: var(--btn); color: var(--btn-text); font-weight: 600; }
+  .seg input:focus-visible + span { outline: 2px solid var(--btn); outline-offset: 2px; }
+  button { font: inherit; cursor: pointer; }
+  .ghost {
+    background: var(--card); color: var(--text); border: none; border-radius: 12px;
+    padding: 12px 14px; width: 100%; margin-top: 10px;
+  }
+  .ghost.warn { color: #c62828; }
+  html[data-scheme="dark"] .ghost.warn { color: #ff8a80; }
+  .link { background: none; border: none; color: var(--btn); padding: 12px 0; font-weight: 600; }
+  #main {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
+    width: calc(100% - 32px); max-width: 488px;
+    background: var(--btn); color: var(--btn-text); border: none; border-radius: 14px;
+    padding: 15px; font-weight: 700; font-size: 17px;
+  }
+  #back { margin-bottom: 8px; }
+  .note { color: var(--hint); font-size: 13px; margin-top: 18px; }
+
+  /* Écran du match */
+  .top { display: flex; justify-content: space-between; color: var(--hint); font-size: 14px; margin-bottom: 10px; }
+  .court { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 56vh; min-height: 300px; }
+  .side {
+    border: none; border-radius: 18px; background: var(--card); color: var(--text);
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: 14px 6px; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  }
+  .side.L { border-top: 6px solid var(--g); }
+  .side.R { border-top: 6px solid var(--d); }
+  .side:active { filter: brightness(0.93); }
+  .side .name { font-weight: 700; font-size: 17px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px; }
+  .side .sets { font-size: 14px; color: var(--hint); }
+  .side .sets b { color: var(--text); font-size: 18px; }
+  .side .pts { font-size: min(26vw, 140px); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .side.L .pts { color: var(--g); }
+  .side.R .pts { color: var(--d); }
+  .serve { font-size: 14px; font-weight: 700; padding: 4px 10px; border-radius: 99px; visibility: hidden; }
+  .serve::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; }
+  .side.L .serve { color: var(--g); }
+  .side.R .serve { color: var(--d); }
+  .side.serving .serve { visibility: visible; }
+  .hist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { background: var(--card); border-radius: 99px; padding: 5px 11px; font-size: 14px; font-variant-numeric: tabular-nums; }
+
+  /* Fin de partie et résultats */
+  .big { font-size: clamp(26px, 8vw, 44px); font-weight: 800; margin: 6px 0; font-variant-numeric: tabular-nums; }
+  .box { background: var(--card); border-radius: 14px; padding: 14px; margin-top: 14px; }
+  .box .lab { color: var(--hint); font-size: 13px; }
+  .box .val { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cat { font-size: 13px; color: var(--hint); text-transform: uppercase; letter-spacing: .04em; margin: 18px 0 6px; }
+  .res { background: var(--card); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; font-size: 15px; }
+  .res b { font-weight: 700; }
+  .res small { display: block; color: var(--hint); font-variant-numeric: tabular-nums; }
+
+  #toast {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 488px;
+    background: #14181f; color: #fff; border-radius: 12px; padding: 12px 14px;
+    font-size: 15px; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.on { opacity: 1; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<button id="back" class="link" hidden>Retour</button>
+
+<!-- 1. Nouvelle partie -->
+<section id="setup" hidden>
+  <h1>Arbitre de table</h1>
+  <p class="sub">Winners Club Tennis de Table, M'Bahiakro</p>
+
+  <label for="f-cat">Catégorie</label>
+  <select id="f-cat">
+    <option>Juniors Garçons</option>
+    <option>Cadets Garçons</option>
+    <option>Minimes Garçons</option>
+    <option>Minimes Filles</option>
+    <option>Autre</option>
+  </select>
+
+  <label for="f-L">Joueur écrit à gauche sur la feuille</label>
+  <input type="text" id="f-L" autocomplete="off" placeholder="Nom">
+
+  <label for="f-R">Joueur écrit à droite</label>
+  <input type="text" id="f-R" autocomplete="off" placeholder="Nom">
+
+  <label>Format</label>
+  <div class="seg">
+    <label style="margin:0"><input type="radio" name="towin" value="3" checked><span>3 manches gagnantes</span></label>
+    <label style="margin:0"><input type="radio" name="towin" value="2"><span>2 manches gagnantes</span></label>
+  </div>
+
+  <label>Premier au service (tirage au sort)</label>
+  <div class="seg">
+    <label style="margin:0"><input type="radio" name="first" value="L" checked><span>Gauche</span></label>
+    <label style="margin:0"><input type="radio" name="first" value="R"><span>Droite</span></label>
+  </div>
+
+  <button id="to-list" class="link" hidden></button>
+  <p class="note" id="preview-note" hidden>Aperçu hors de Telegram : le bouton du bas et les vibrations remplacent ceux de Telegram.</p>
+</section>
+
+<!-- 2. Le match -->
+<section id="match" hidden>
+  <div class="top"><span id="m-cat"></span><span id="m-game"></span></div>
+  <div class="court">
+    <button class="side L" id="side-L" aria-label="Point pour le joueur de gauche">
+      <span class="name"></span><span class="sets"></span><span class="pts">0</span><span class="serve">Sert</span>
+    </button>
+    <button class="side R" id="side-R" aria-label="Point pour le joueur de droite">
+      <span class="name"></span><span class="sets"></span><span class="pts">0</span><span class="serve">Sert</span>
+    </button>
+  </div>
+  <div class="hist" id="m-hist"></div>
+  <button class="ghost" id="undo">Annuler le dernier point</button>
+  <button class="ghost warn" id="stop">Arrêter la partie</button>
+</section>
+
+<!-- 3. Fin de partie -->
+<section id="end" hidden>
+  <p class="sub" id="e-cat" style="margin-bottom:4px"></p>
+  <h1 id="e-winner"></h1>
+  <p class="big" id="e-score"></p>
+  <div class="box">
+    <div class="lab">À écrire dans la case des manches</div>
+    <div class="val" id="e-feuille"></div>
+  </div>
+  <div class="hist" id="e-games"></div>
+  <button class="ghost" id="e-undo">Annuler le dernier point</button>
+</section>
+
+<!-- 4. Résultats enregistrés -->
+<section id="list" hidden>
+  <h1>Résultats enregistrés</h1>
+  <p class="sub" id="l-count"></p>
+  <div id="l-items"></div>
+  <button class="ghost" id="l-copy">Copier tous les résultats</button>
+  <button class="ghost" id="l-share" hidden>Envoyer dans une discussion Telegram</button>
+  <button class="ghost warn" id="l-clear">Effacer les résultats</button>
+</section>
+
+<button id="main" hidden></button>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// ---------- Telegram ----------
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);                  // vide quand la page est ouverte hors de Telegram
+const can = v => inTg && tg.isVersionAtLeast(v);
+if (tg) tg.ready();
+if (inTg) {
+  tg.expand();                                        // plein écran
+  document.documentElement.dataset.scheme = tg.colorScheme;
+  tg.onEvent('themeChanged', () => { document.documentElement.dataset.scheme = tg.colorScheme; });
+}
+if (can('7.7')) tg.disableVerticalSwipes();           // un glissé vers le bas ne ferme pas la partie
+if (can('6.2')) tg.enableClosingConfirmation();       // Telegram demande avant de fermer
+document.body.classList.toggle('in-tg', inTg);
+document.getElementById('preview-note').hidden = inTg;
+
+const $ = s => document.querySelector(s);
+
+function haptic(kind) {
+  if (can('6.1')) {
+    if (kind === 'point') tg.HapticFeedback.impactOccurred('light');
+    else tg.HapticFeedback.notificationOccurred('success');
+  } else if (navigator.vibrate) {
+    navigator.vibrate(kind === 'point' ? 15 : [30, 40, 30]);
+  }
+}
+
+// Bouton principal : celui de Telegram dans Telegram, un bouton de la page sinon
+let mainFn = null;
+function setMain(text, fn) {
+  mainFn = fn;
+  if (inTg) {
+    $('#main').hidden = true;
+    if (text) { tg.MainButton.setText(text); tg.MainButton.show(); } else tg.MainButton.hide();
+  } else {
+    $('#main').hidden = !text;
+    $('#main').textContent = text || '';
+  }
+}
+if (inTg) tg.MainButton.onClick(() => mainFn && mainFn());
+$('#main').onclick = () => mainFn && mainFn();
+
+let backFn = null;
+function setBack(fn) {
+  backFn = fn;
+  if (can('6.1')) { fn ? tg.BackButton.show() : tg.BackButton.hide(); $('#back').hidden = true; }
+  else $('#back').hidden = !fn;
+}
+if (can('6.1')) tg.BackButton.onClick(() => backFn && backFn());
+$('#back').onclick = () => backFn && backFn();
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+// Un bouton dangereux demande un second toucher (pas de fenêtre qui bloque)
+function twoTaps(btn, label, action) {
+  let armed = false, timer = null;
+  btn.textContent = label;
+  btn.onclick = () => {
+    if (!armed) {
+      armed = true; btn.textContent = 'Touche encore pour confirmer';
+      timer = setTimeout(() => { armed = false; btn.textContent = label; }, 3000);
+      return;
+    }
+    clearTimeout(timer); armed = false; btn.textContent = label; action();
+  };
+}
+
+// ---------- Données, gardées dans le téléphone seulement ----------
+const KEY = 'arbitre-tt-v1';
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || { cur: null, done: [] }; }
+  catch (e) { return { cur: null, done: [] }; }
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+let S = load();
+
+// ---------- Règles du tennis de table ----------
+const other = s => (s === 'L' ? 'R' : 'L');
+
+// Tout se recalcule depuis la liste des points : annuler = retirer le dernier point
+function derive(m) {
+  const games = [], won = { L: 0, R: 0 };
+  let cur = { L: 0, R: 0 }, winner = null;
+  for (const p of m.points) {
+    if (winner) break;
+    cur[p]++;
+    if ((cur.L >= 11 || cur.R >= 11) && Math.abs(cur.L - cur.R) >= 2) {   // manche à 11, deux points d'écart
+      const w = cur.L > cur.R ? 'L' : 'R';
+      games.push({ L: cur.L, R: cur.R, w });
+      won[w]++;
+      cur = { L: 0, R: 0 };
+      if (won[w] === m.toWin) winner = w;
+    }
+  }
+  // Service : celui qui a reçu en premier sert en premier à la manche suivante ;
+  // changement tous les 2 points, puis à chaque point à partir de 10-10
+  const start = games.length % 2 === 0 ? m.first : other(m.first);
+  const n = cur.L + cur.R;
+  const switches = (cur.L >= 10 && cur.R >= 10) ? n - 10 : Math.floor(n / 2);
+  const server = switches % 2 === 0 ? start : other(start);
+  const decider = won.L === m.toWin - 1 && won.R === m.toWin - 1;
+  return { games, cur, won, winner, server, decider };
+}
+
+// Notation de la feuille : points du perdant, signe moins quand le joueur de gauche perd
+const note = g => (g.w === 'L' ? String(g.R) : '-' + g.L);
+const nameOf = (m, s) => (s === 'L' ? m.L : m.R);
+
+// ---------- Écrans ----------
+function show(id) {
+  document.querySelectorAll('section').forEach(el => { el.hidden = el.id !== id; });
+  window.scrollTo(0, 0);
+  if (id === 'setup') { renderSetup(); setMain('Commencer la partie', start); setBack(null); }
+  if (id === 'match') { renderMatch(); setMain(null); setBack(null); }
+  if (id === 'end')   { renderEnd(); setMain('Enregistrer le résultat', record); setBack(null); }
+  if (id === 'list')  { renderList(); setMain('Nouvelle partie', () => show('setup')); setBack(() => show('setup')); }
+}
+
+function renderSetup() {
+  if (S.lastCat) $('#f-cat').value = S.lastCat;
+  const n = S.done.length;
+  $('#to-list').hidden = n === 0;
+  $('#to-list').textContent = `Résultats enregistrés (${n})`;
+}
+$('#to-list').onclick = () => show('list');
+
+function start() {
+  const L = $('#f-L').value.trim(), R = $('#f-R').value.trim();
+  if (!L || !R) { toast('Écris le nom des deux joueurs.'); return; }
+  if (L.toLowerCase() === R.toLowerCase()) { toast('Les deux noms sont identiques.'); return; }
+  const cat = $('#f-cat').value;
+  const toWin = Number(document.querySelector('input[name=towin]:checked').value);
+  const first = document.querySelector('input[name=first]:checked').value;
+  S.lastCat = cat;
+  S.cur = { cat, L, R, toWin, first, points: [] };
+  save();
+  show('match');
+}
+
+function renderMatch() {
+  const m = S.cur, d = derive(m);
+  $('#m-cat').textContent = m.cat;
+  $('#m-game').textContent = `Manche ${d.games.length + 1}` + (d.decider ? ' (décisive)' : '');
+  for (const s of ['L', 'R']) {
+    const el = $('#side-' + s);
+    el.querySelector('.name').textContent = nameOf(m, s);
+    el.querySelector('.sets').innerHTML = `Manches <b>${d.won[s]}</b>`;
+    el.querySelector('.pts').textContent = d.cur[s];
+    el.classList.toggle('serving', d.server === s);
+  }
+  $('#m-hist').innerHTML = '';
+  d.games.forEach((g, i) => {
+    const c = document.createElement('span');
+    c.className = 'chip';
+    c.textContent = `M${i + 1} : ${g.L}-${g.R}`;
+    $('#m-hist').appendChild(c);
+  });
+}
+
+function point(side) {
+  const m = S.cur;
+  if (!m) return;
+  const before = derive(m);
+  if (before.winner) return;
+  m.points.push(side);
+  save();
+  const d = derive(m);
+  if (d.winner) { haptic('fin'); show('end'); return; }
+  if (d.games.length > before.games.length) {
+    const g = d.games[d.games.length - 1];
+    haptic('fin');
+    toast(`Manche ${d.games.length} à ${nameOf(m, g.w)} (${g.L}-${g.R}). Changement de côté.`);
+  } else {
+    haptic('point');
+    if (d.decider && Math.max(d.cur.L, d.cur.R) === 5 && Math.max(before.cur.L, before.cur.R) === 4) {
+      toast('Manche décisive, 5 points : changement de côté.');
+    }
+  }
+  renderMatch();
+}
+$('#side-L').onclick = () => point('L');
+$('#side-R').onclick = () => point('R');
+
+function undo() {
+  if (!S.cur || S.cur.points.length === 0) { toast('Aucun point à annuler.'); return; }
+  S.cur.points.pop();
+  save();
+  show('match');
+}
+$('#undo').onclick = undo;
+$('#e-undo').onclick = undo;
+
+twoTaps($('#stop'), 'Arrêter la partie', () => {
+  const m = S.cur;
+  S.cur = null; save();
+  show('setup');
+  $('#f-L').value = m.L; $('#f-R').value = m.R;
+  toast('Partie arrêtée, rien n\'est enregistré.');
+});
+
+function renderEnd() {
+  const m = S.cur, d = derive(m);
+  $('#e-cat').textContent = m.cat;
+  $('#e-winner').textContent = `Vainqueur : ${nameOf(m, d.winner)}`;
+  $('#e-score').textContent = `${m.L} ${d.won.L} - ${d.won.R} ${m.R}`;
+  $('#e-feuille').textContent = d.games.map(note).join(', ');
+  $('#e-games').innerHTML = '';
+  d.games.forEach((g, i) => {
+    const c = document.createElement('span');
+    c.className = 'chip';
+    c.textContent = `M${i + 1} : ${g.L}-${g.R}`;
+    $('#e-games').appendChild(c);
+  });
+}
+
+function record() {
+  const m = S.cur, d = derive(m);
+  S.done.push({
+    cat: m.cat, L: m.L, R: m.R,
+    vainqueur: nameOf(m, d.winner),
+    manches: `${d.won.L}-${d.won.R}`,
+    feuille: d.games.map(note).join(', '),
+    t: Date.now()
+  });
+  S.cur = null;
+  save();
+  $('#f-L').value = ''; $('#f-R').value = '';
+  show('setup');
+  toast('Résultat enregistré.');
+}
+
+function lineOf(r) { return `${r.L} contre ${r.R} : ${r.manches} (${r.feuille}), vainqueur ${r.vainqueur}`; }
+
+function allText() {
+  const d = new Date();
+  const date = d.toLocaleDateString('fr-FR');
+  let out = `Winners Club, résultats du ${date}\n`;
+  const cats = [...new Set(S.done.map(r => r.cat))];
+  for (const c of cats) {
+    out += `\n${c}\n`;
+    S.done.filter(r => r.cat === c).forEach(r => { out += `- ${lineOf(r)}\n`; });
+  }
+  return out;
+}
+
+function renderList() {
+  const box = $('#l-items');
+  box.innerHTML = '';
+  $('#l-count').textContent = S.done.length === 0 ? 'Aucun résultat.' : `${S.done.length} partie(s), gardées dans ce téléphone.`;
+  const cats = [...new Set(S.done.map(r => r.cat))];
+  for (const c of cats) {
+    const h = document.createElement('div'); h.className = 'cat'; h.textContent = c; box.appendChild(h);
+    S.done.filter(r => r.cat === c).forEach(r => {
+      const el = document.createElement('div'); el.className = 'res';
+      const b = document.createElement('b'); b.textContent = `${r.L} contre ${r.R}`;
+      const s = document.createElement('small'); s.textContent = `${r.manches}  (${r.feuille}), vainqueur ${r.vainqueur}`;
+      el.append(b, s); box.appendChild(el);
+    });
+  }
+  $('#l-share').hidden = !inTg || S.done.length === 0;
+  $('#l-copy').hidden = S.done.length === 0;
+  $('#l-clear').hidden = S.done.length === 0;
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove(); return ok;
+  }
+}
+$('#l-copy').onclick = async () => toast((await copy(allText())) ? 'Copié. Colle-le où tu veux.' : 'Copie impossible sur ce téléphone.');
+// Partage : Telegram ouvre son choix de discussion (à toi-même, au robot Jarvis, au groupe du club)
+$('#l-share').onclick = () => tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(allText()));
+twoTaps($('#l-clear'), 'Effacer les résultats', () => { S.done = []; save(); show('setup'); toast('Résultats effacés.'); });
+
+// ---------- Démarrage : une partie en cours reprend là où elle était ----------
+if (S.cur) show(derive(S.cur).winner ? 'end' : 'match');
+else show('setup');
+</script>
+</body>
+</html>
