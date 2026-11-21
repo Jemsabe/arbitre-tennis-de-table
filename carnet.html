@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Carnet du coach</title>
+<!-- Bibliothèque officielle de Telegram pour les mini-applications -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Couleurs : celles de Telegram quand la page s'ouvre dans Telegram, sinon des valeurs de secours */
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #14181f);
+    --hint: var(--tg-theme-hint-color, #6b7280);
+    --card: var(--tg-theme-secondary-bg-color, #eef1f5);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-text: var(--tg-theme-button-text-color, #ffffff);
+    --g: #1d4ed8;   /* joueur de gauche : bleu */
+    --d: #b45309;   /* joueur de droite : ambre */
+    --ok: #15803d;
+    --ko: #c62828;
+  }
+  html[data-scheme="dark"] { --g: #8ab4ff; --d: #f5a524; --ok: #6ee7a0; --ko: #ff8a80; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.4;
+    -webkit-tap-highlight-color: transparent;
+    padding: 16px 16px 96px;
+    max-width: 520px; margin: 0 auto;
+  }
+  body.in-tg { padding-bottom: 24px; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  .sub { color: var(--hint); margin: 0 0 16px; font-size: 14px; }
+  label { display: block; font-size: 14px; color: var(--hint); margin: 14px 0 6px; }
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; font: inherit; color: var(--text); background: var(--card);
+    border: 1px solid transparent; border-radius: 12px; padding: 12px 14px;
+  }
+  textarea { resize: vertical; min-height: 150px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--btn); outline-offset: 1px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span {
+    display: block; text-align: center; padding: 11px 8px; border-radius: 12px;
+    background: var(--card); cursor: pointer; font-size: 15px;
+  }
+  .seg input:checked + span { background: var(--btn); color: var(--btn-text); font-weight: 600; }
+  .seg input:focus-visible + span { outline: 2px solid var(--btn); outline-offset: 2px; }
+  button { font: inherit; cursor: pointer; }
+  .ghost {
+    background: var(--card); color: var(--text); border: none; border-radius: 12px;
+    padding: 12px 14px; width: 100%; margin-top: 10px;
+  }
+  .ghost.warn { color: var(--ko); }
+  .link { background: none; border: none; color: var(--btn); padding: 12px 0; font-weight: 600; text-align: left; }
+  #main {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px;
+    width: calc(100% - 32px); max-width: 488px;
+    background: var(--btn); color: var(--btn-text); border: none; border-radius: 14px;
+    padding: 15px; font-weight: 700; font-size: 17px;
+  }
+  #back { margin-bottom: 8px; }
+  .note { color: var(--hint); font-size: 13px; margin-top: 14px; }
+  .cat { font-size: 13px; color: var(--hint); text-transform: uppercase; letter-spacing: .04em; margin: 20px 0 6px; }
+
+  /* Cartes cliquables (poules, parties) */
+  .card {
+    display: block; width: 100%; text-align: left; border: none; color: var(--text);
+    background: var(--card); border-radius: 12px; padding: 11px 13px; margin-bottom: 7px;
+  }
+  .card b { font-weight: 700; }
+  .card small { display: block; color: var(--hint); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .card .lab { color: var(--hint); font-size: 13px; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .card.todo small { color: var(--btn); font-weight: 600; }
+
+  /* Classement */
+  table.cl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table.cl th { text-align: left; font-size: 12px; font-weight: 600; color: var(--hint); padding: 4px 6px; }
+  table.cl td { padding: 10px 6px; border-top: 1px solid var(--card); }
+  table.cl td.r { font-weight: 700; white-space: nowrap; }
+  table.cl td.n { width: 100%; }
+  table.cl td.n button { background: none; border: none; color: var(--text); padding: 0; text-align: left; font-weight: 600; }
+  table.cl td.c { text-align: center; white-space: nowrap; }
+  .tag { font-size: 12px; color: var(--hint); font-weight: 400; }
+  .prov { background: var(--card); border-radius: 10px; padding: 8px 11px; font-size: 14px; color: var(--hint); margin-top: 8px; }
+  .why { font-size: 14px; margin-top: 8px; }
+
+  /* Saisie des manches */
+  .who { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .who div { background: var(--card); border-radius: 12px; padding: 8px 10px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who small { display: block; font-weight: 400; color: var(--hint); font-size: 12px; }
+  .who .L { border-left: 5px solid var(--g); }
+  .who .R { border-left: 5px solid var(--d); }
+  .screen {
+    background: var(--card); border-radius: 14px; padding: 12px 14px; min-height: 64px;
+    font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em;
+    word-break: break-word;
+  }
+  .screen .ph { font-size: 14px; font-weight: 400; color: var(--hint); letter-spacing: 0; }
+  .hist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: var(--card); border-radius: 99px; padding: 5px 11px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .verdict { margin-top: 8px; font-weight: 600; min-height: 22px; }
+  .verdict.ok { color: var(--ok); }
+  .verdict.ko { color: var(--ko); }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .pad button {
+    border: none; border-radius: 12px; background: var(--card); color: var(--text);
+    font-size: 24px; font-weight: 700; padding: 13px 0; touch-action: manipulation;
+  }
+  .pad button:active { filter: brightness(0.92); }
+  .pad .wide { grid-column: 1 / -1; font-size: 17px; background: var(--btn); color: var(--btn-text); }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .row3 .ghost { font-size: 14px; }
+
+  /* Fiche joueur */
+  .crit { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--card); }
+  .crit span { font-size: 15px; }
+  .dots { display: flex; gap: 6px; flex-shrink: 0; }
+  .dots button {
+    width: 40px; height: 40px; border-radius: 10px; border: none;
+    background: var(--card); color: var(--text); font-weight: 700; font-size: 16px;
+  }
+  .dots button.on { background: var(--btn); color: var(--btn-text); }
+  .dots.six button { width: 38px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button { border: none; border-radius: 99px; background: var(--card); color: var(--text); padding: 8px 13px; font-size: 14px; }
+  .chips button.on { background: var(--btn); color: var(--btn-text); font-weight: 600; }
+
+  pre.bilan { white-space: pre-wrap; word-break: break-word; background: var(--card); border-radius: 12px; padding: 12px; font: 13px/1.45 ui-monospace, Consolas, monospace; }
+
+  #toast {
+    position: fixed; left: 50%; top: 14px; transform: translateX(-50%);
+    width: calc(100% - 32px); max-width: 488px;
+    background: #14181f; color: #fff; border-radius: 12px; padding: 12px 14px;
+    font-size: 15px; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 5;
+  }
+  #toast.on { opacity: 1; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<button id="back" class="link" hidden>Retour</button>
+
+<!-- 1. Les poules -->
+<section id="home" hidden>
+  <h1>Carnet du coach</h1>
+  <p class="sub">Winners Club Tennis de Table, M'Bahiakro</p>
+  <div id="h-list"></div>
+  <p class="note" id="h-empty">Aucune poule. Crée la première avec le bouton du bas : catégorie, format et joueurs. Un défi est une poule de 2 joueurs.</p>
+  <button class="ghost" id="h-bilan" hidden>Bilan à envoyer au robot Jarvis</button>
+  <button class="ghost" id="h-arbitre">Arbitre de table</button>
+  <button class="ghost warn" id="h-clear" hidden></button>
+  <p class="note" id="preview-note" hidden>Aperçu hors de Telegram : le bouton du bas remplace celui de Telegram.</p>
+</section>
+
+<!-- 2. Créer ou modifier une poule -->
+<section id="edit" hidden>
+  <h1 id="e-title">Nouvelle poule</h1>
+  <label for="e-cat">Catégorie</label>
+  <select id="e-cat">
+    <option>Juniors Garçons</option>
+    <option>Cadets Garçons</option>
+    <option>Minimes Garçons</option>
+    <option>Minimes Filles</option>
+    <option>Autre</option>
+  </select>
+  <input type="text" id="e-cat-autre" autocomplete="off" placeholder="Nom de la catégorie" style="margin-top:8px" hidden>
+  <label for="e-nom">Nom (facultatif)</label>
+  <input type="text" id="e-nom" autocomplete="off" placeholder="Défi, Poule de sélection…">
+  <label>Format</label>
+  <div class="seg">
+    <label style="margin:0"><input type="radio" name="towin" value="2"><span>2 manches gagnantes</span></label>
+    <label style="margin:0"><input type="radio" name="towin" value="3"><span>3 manches gagnantes</span></label>
+  </div>
+  <label for="e-joueurs">Joueurs, un nom par ligne, dans l'ordre de la feuille (2 à 5)</label>
+  <textarea id="e-joueurs" autocomplete="off" spellcheck="false" placeholder="1er joueur&#10;2e joueur&#10;3e joueur"></textarea>
+  <p class="note" id="e-lock" hidden>Des parties sont déjà saisies : on peut corriger l'orthographe des noms, pas le nombre de joueurs ni le format.</p>
+</section>
+
+<!-- 3. Une poule : classement et parties -->
+<section id="poule" hidden>
+  <p class="sub" id="p-fmt" style="margin-bottom:2px"></p>
+  <h1 id="p-title"></h1>
+  <div class="cat">Classement</div>
+  <table class="cl">
+    <thead><tr><th>Place</th><th>Joueur</th><th style="text-align:center">Vict.</th><th style="text-align:center">Manches</th></tr></thead>
+    <tbody id="p-cl"></tbody>
+  </table>
+  <div id="p-why"></div>
+  <div class="cat">Parties, dans l'ordre de la feuille</div>
+  <div id="p-parties"></div>
+  <p class="note">Touche un joueur pour sa fiche (tests et grille), une partie pour saisir ses manches.</p>
+  <button class="ghost" id="p-edit">Modifier la poule</button>
+  <button class="ghost warn" id="p-del"></button>
+</section>
+
+<!-- 4. Saisie d'une partie -->
+<section id="saisie" hidden>
+  <p class="sub" id="s-cat" style="margin-bottom:2px"></p>
+  <h1 id="s-title"></h1>
+  <div class="who">
+    <div class="L"><small>Gauche</small><span id="s-L"></span></div>
+    <div class="R"><small>Droite</small><span id="s-R"></span></div>
+  </div>
+  <div class="screen" id="s-screen"></div>
+  <div class="hist" id="s-sets"></div>
+  <div class="verdict" id="s-verdict"></div>
+  <div class="pad" id="s-pad">
+    <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button>
+    <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button>
+    <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button>
+    <button type="button" data-k="-" aria-label="Moins : le joueur de gauche perd la manche">−</button><button type="button" data-k="0">0</button><button type="button" data-k="del" aria-label="Effacer le dernier signe">⌫</button>
+    <button type="button" data-k="next" class="wide">Manche suivante</button>
+  </div>
+  <div class="cat">Partie non jouée</div>
+  <div class="row3">
+    <button class="ghost" id="s-woL" style="margin-top:0"></button>
+    <button class="ghost" id="s-woR" style="margin-top:0"></button>
+  </div>
+  <button class="ghost" id="s-wo2">Double forfait (WO)</button>
+  <button class="ghost warn" id="s-clear" hidden></button>
+</section>
+
+<!-- 5. Fiche d'un joueur -->
+<section id="fiche" hidden>
+  <p class="sub" id="f-where" style="margin-bottom:2px"></p>
+  <h1 id="f-nom"></h1>
+  <div class="cat">Tests du jour</div>
+  <div class="crit"><span>Service, réglementaires et bons sur 5</span></div>
+  <div class="dots six" id="f-service"></div>
+  <label for="f-regul">Régularité : balles renvoyées en 1 minute</label>
+  <input type="number" id="f-regul" inputmode="numeric" min="0" max="200" placeholder="Nombre de balles">
+  <div class="cat">Grille d'observation</div>
+  <div id="f-grille"></div>
+  <p class="note">1 = débute, 2 = en progrès, 3 = maîtrisé, 4 = point fort. Observer sur 2 ou 3 séances avant de noter. Toucher une note déjà choisie l'enlève.</p>
+  <div class="cat">Points à travailler (deux au plus)</div>
+  <div class="chips" id="f-travail"></div>
+  <label for="f-obs">Observation</label>
+  <textarea id="f-obs" style="min-height:80px" placeholder="Ce que tu as vu aujourd'hui"></textarea>
+  <p class="note">Tout s'enregistre dès que tu touches, dans ce téléphone seulement.</p>
+</section>
+
+<!-- 6. Bilan -->
+<section id="bilan" hidden>
+  <h1>Bilan</h1>
+  <p class="sub">Envoie-le au robot Jarvis : il prépare les feuilles de poule et la sélection.</p>
+  <pre class="bilan" id="b-text"></pre>
+  <button class="ghost" id="b-share" hidden>Envoyer au robot Jarvis</button>
+  <button class="ghost" id="b-copy">Copier</button>
+</section>
+
+<button id="main" hidden></button>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// ---------- Telegram ----------
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);                  // vide quand la page est ouverte hors de Telegram
+const can = v => inTg && tg.isVersionAtLeast(v);
+if (tg) tg.ready();
+if (inTg) {
+  tg.expand();
+  document.documentElement.dataset.scheme = tg.colorScheme;
+  tg.onEvent('themeChanged', () => { document.documentElement.dataset.scheme = tg.colorScheme; });
+}
+if (can('7.7')) tg.disableVerticalSwipes();
+if (can('6.2')) tg.enableClosingConfirmation();
+document.body.classList.toggle('in-tg', inTg);
+document.getElementById('preview-note').hidden = inTg;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function haptic() {
+  if (can('6.1')) tg.HapticFeedback.impactOccurred('light');
+  else if (navigator.vibrate) navigator.vibrate(12);
+}
+
+let mainFn = null;
+function setMain(text, fn) {
+  mainFn = fn;
+  if (inTg) {
+    $('#main').hidden = true;
+    if (text) { tg.MainButton.setText(text); tg.MainButton.show(); } else tg.MainButton.hide();
+  } else {
+    $('#main').hidden = !text;
+    $('#main').textContent = text || '';
+  }
+}
+if (inTg) tg.MainButton.onClick(() => mainFn && mainFn());
+$('#main').onclick = () => mainFn && mainFn();
+
+let backFn = null;
+function setBack(fn) {
+  backFn = fn;
+  if (can('6.1')) { fn ? tg.BackButton.show() : tg.BackButton.hide(); $('#back').hidden = true; }
+  else $('#back').hidden = !fn;
+}
+if (can('6.1')) tg.BackButton.onClick(() => backFn && backFn());
+$('#back').onclick = () => backFn && backFn();
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2800);
+}
+
+// Un bouton dangereux demande un second toucher (pas de fenêtre qui bloque)
+function twoTaps(btn, label, action) {
+  let armed = false, timer = null;
+  btn.textContent = label;
+  btn.onclick = () => {
+    if (!armed) {
+      armed = true; btn.textContent = 'Touche encore pour confirmer';
+      timer = setTimeout(() => { armed = false; btn.textContent = label; }, 3000);
+      return;
+    }
+    clearTimeout(timer); armed = false; btn.textContent = label; action();
+  };
+}
+
+// ---------- Données, gardées dans le téléphone seulement ----------
+const KEY = 'carnet-coach-v1';
+function load() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || { poules: [], fiches: {} }; }
+  catch (e) { return { poules: [], fiches: {} }; }
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+let S = load();
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+// ---------- Règles ----------
+// Ordre des parties des feuilles de poule du club (le même que le 04/11) ; 2 joueurs : une partie
+const ORDRE = [[1, 4], [2, 3], [1, 3], [2, 4], [1, 2], [3, 4]];
+const ORDRE5 = [[2, 5], [3, 4], [1, 3], [4, 5], [1, 5], [2, 4], [1, 4], [2, 3], [3, 5], [1, 2]];
+function ordreParties(n) {
+  return (n === 5 ? ORDRE5 : ORDRE.filter(([a, b]) => Math.max(a, b) <= n)).map(([a, b]) => ({ a, b, lab: `${a} - ${b}` }));
+}
+
+// Manches notées comme sur la feuille : points du perdant, « - » quand le joueur de gauche perd.
+// « 9 » = gauche gagne 11-9 ; « -12 » = gauche perd 12-14 ; « 0 » = 11-0, « -0 » = 0-11.
+function lireManches(list, toWin) {
+  const sets = [], won = { L: 0, R: 0 };
+  for (const s of list) {
+    if (!/^-?\d{1,2}$/.test(s)) return { sets, won, winner: null, err: `« ${s} » n'est pas une manche.` };
+    if (won.L === toWin || won.R === toWin) return { sets, won, winner: null, err: 'Une manche de trop : la partie était déjà gagnée.' };
+    const w = s.startsWith('-') ? 'R' : 'L';
+    const p = Number(s.replace('-', ''));
+    const pw = p >= 10 ? p + 2 : 11;                   // à partir de 10-10, il faut deux points d'écart
+    won[w]++;
+    sets.push({ w, L: w === 'L' ? pw : p, R: w === 'L' ? p : pw });
+  }
+  const winner = won.L === toWin ? 'L' : won.R === toWin ? 'R' : null;
+  return { sets, won, winner, err: winner ? null : `Pas fini : il faut ${toWin} manches gagnantes.` };
+}
+
+// Points de rencontre (règlement ITTF suivi par la FITT) : 2 victoire, 1 défaite jouée, 0 forfait.
+// Calculés sur les seules parties entre les joueurs du groupe.
+function stats(poule, group) {
+  const st = {};
+  group.forEach(i => { st[i] = { pts: 0, v: 0, mg: 0, mp: 0, pg: 0, pp: 0, wo: false }; });
+  for (const { a, b, lab } of ordreParties(poule.joueurs.length)) {
+    if (!(a in st) || !(b in st)) continue;
+    const r = poule.res[lab];
+    if (!r) continue;
+    if (r.wo) {
+      r.wo.forEach(f => { st[f].wo = true; });
+      if (r.wo.length === 1) { const w = r.wo[0] === a ? b : a; st[w].pts += 2; st[w].v++; }
+      continue;
+    }
+    const d = lireManches(r.m, poule.toWin);
+    if (d.err) continue;
+    const w = d.winner === 'L' ? a : b, l = w === a ? b : a;
+    st[w].pts += 2; st[w].v++; st[l].pts += 1;
+    st[a].mg += d.won.L; st[a].mp += d.won.R; st[b].mg += d.won.R; st[b].mp += d.won.L;
+    for (const s of d.sets) { st[a].pg += s.L; st[a].pp += s.R; st[b].pg += s.R; st[b].pp += s.L; }
+  }
+  return st;
+}
+const quotient = (g, p) => (p === 0 ? (g > 0 ? Infinity : 0) : g / p);
+const CRITERES = [
+  [s => s.pts, 'leurs parties entre eux'],
+  [s => quotient(s.mg, s.mp), 'le quotient des manches entre eux'],
+  [s => quotient(s.pg, s.pp), 'le quotient des points entre eux'],
+];
+// Égalité : on ne regarde que les parties entre les ex æquo (points, puis manches, puis points de jeu).
+// Dès qu'un joueur est départagé, ses parties sont retirées et les autres recommencent au début.
+function departage(poule, group, notes, top) {
+  if (group.length < 2) return [group];
+  const st = stats(poule, group);
+  for (let k = 0; k < CRITERES.length; k++) {
+    const [f, lib] = CRITERES[k];
+    const vals = [...new Set(group.map(i => f(st[i])))].sort((x, y) => y - x);
+    if (vals.length > 1) {
+      if (!(top && k === 0)) notes.push({ joueurs: group.slice(), lib });
+      const out = [];
+      for (const v of vals) out.push(...departage(poule, group.filter(i => f(st[i]) === v), notes, false));
+      return out;
+    }
+  }
+  notes.push({ joueurs: group.slice(), lib: null });
+  return [group];
+}
+function classement(poule) {
+  const n = poule.joueurs.length, all = Array.from({ length: n }, (_, i) => i + 1);
+  const notes = [];
+  const blocs = departage(poule, all, notes, true);
+  const rang = {};
+  let pos = 1;
+  for (const b of blocs) { b.forEach(i => { rang[i] = pos; }); pos += b.length; }
+  const parties = ordreParties(n);
+  return { blocs, rang, notes, total: stats(poule, all), joues: parties.filter(p => poule.res[p.lab]).length, nb: parties.length };
+}
+
+const CRIT = ['Prise de raquette', 'Service', 'Coup droit', 'Revers', 'Déplacement', 'Régularité', 'Mental / fair-play', 'Assiduité'];
+const fem = p => /fille/i.test(p.cat);
+const place = (r, f, exae) => (r === 1 ? (f ? '1re' : '1er') : r + 'e') + (exae ? ' ex æquo' : '');
+const titre = p => p.cat + (p.nom ? ', ' + p.nom : '');
+const nk = s => s.trim().toUpperCase();
+function resTexte(p, lab) {
+  const r = p.res[lab];
+  if (!r) return null;
+  const [a, b] = lab.split(' - ').map(Number);
+  if (r.wo) return r.wo.length === 2 ? 'double forfait (WO)' : `forfait de ${p.joueurs[r.wo[0] - 1]} (WO), vainqueur ${p.joueurs[(r.wo[0] === a ? b : a) - 1]}`;
+  const d = lireManches(r.m, p.toWin);
+  return `${r.m.join(', ')}, vainqueur ${p.joueurs[(d.winner === 'L' ? a : b) - 1]}`;
+}
+
+// ---------- Navigation ----------
+let cur = { poule: null, lab: null, joueur: null, edit: false };
+const P = () => S.poules.find(p => p.id === cur.poule);
+
+function show(id) {
+  document.querySelectorAll('section').forEach(el => { el.hidden = el.id !== id; });
+  window.scrollTo(0, 0);
+  if (id === 'home')   { renderHome(); setMain('Nouvelle poule', () => openEdit(null)); setBack(() => { location.href = 'index.html'; }); }
+  if (id === 'edit')   { setMain(cur.edit ? 'Enregistrer' : 'Créer la poule', saveEdit); setBack(() => (cur.edit ? show('poule') : show('home'))); }
+  if (id === 'poule')  { renderPoule(); setBack(() => show('home')); }
+  if (id === 'saisie') { renderSaisie(); setMain('Enregistrer la partie', saveSaisie); setBack(() => show('poule')); }
+  if (id === 'fiche')  { renderFiche(); setMain(cur.poule ? 'Retour à la poule' : null, () => show('poule')); setBack(() => show('poule')); }
+  if (id === 'bilan')  { renderBilan(); setMain(null); setBack(() => show('home')); }
+}
+$('#h-arbitre').onclick = () => { location.href = 'index.html'; };
+
+// ---------- 1. Les poules ----------
+function renderHome() {
+  const box = $('#h-list');
+  box.innerHTML = '';
+  $('#h-empty').hidden = S.poules.length > 0;
+  $('#h-bilan').hidden = S.poules.length === 0;
+  $('#h-clear').hidden = S.poules.length === 0 && Object.keys(S.fiches).length === 0;
+  for (const p of S.poules) {
+    const c = classement(p);
+    const el = document.createElement('button');
+    el.className = 'card';
+    const fini = c.joues === c.nb;
+    const tete = c.blocs[0].length === 1 && c.joues > 0 ? p.joueurs[c.blocs[0][0] - 1] : null;
+    el.innerHTML = `<b>${esc(titre(p))}</b><small>${p.joueurs.length} joueurs, ${p.toWin} manches gagnantes, ${c.joues}/${c.nb} partie${c.nb > 1 ? 's' : ''}` +
+      (fini && tete ? ` : ${place(1, fem(p))} ${esc(tete)}` : '') + '</small>';
+    el.onclick = () => { cur.poule = p.id; show('poule'); };
+    box.appendChild(el);
+  }
+}
+$('#h-bilan').onclick = () => show('bilan');
+twoTaps($('#h-clear'), 'Tout effacer (poules et fiches)', () => { S = { poules: [], fiches: {} }; save(); show('home'); toast('Carnet effacé.'); });
+
+// ---------- 2. Créer ou modifier une poule ----------
+const CATS = ['Juniors Garçons', 'Cadets Garçons', 'Minimes Garçons', 'Minimes Filles'];
+$('#e-cat').onchange = () => { $('#e-cat-autre').hidden = $('#e-cat').value !== 'Autre'; };
+function openEdit(p) {
+  cur.edit = !!p;
+  $('#e-title').textContent = p ? 'Modifier la poule' : 'Nouvelle poule';
+  const cat = p ? p.cat : (S.lastCat || CATS[0]);
+  $('#e-cat').value = CATS.includes(cat) ? cat : 'Autre';
+  $('#e-cat-autre').value = CATS.includes(cat) ? '' : cat;
+  $('#e-cat-autre').hidden = CATS.includes(cat);
+  $('#e-nom').value = p ? (p.nom || '') : '';
+  const tw = String(p ? p.toWin : (S.lastToWin || 2));
+  document.querySelectorAll('input[name=towin]').forEach(r => { r.checked = r.value === tw; });
+  $('#e-joueurs').value = p ? p.joueurs.join('\n') : '';
+  const locked = !!p && Object.keys(p.res).length > 0;
+  $('#e-lock').hidden = !locked;
+  document.querySelectorAll('input[name=towin]').forEach(r => { r.disabled = locked; });
+  show('edit');
+}
+function saveEdit() {
+  const cat = $('#e-cat').value === 'Autre' ? $('#e-cat-autre').value.trim() : $('#e-cat').value;
+  if (!cat) { toast('Écris le nom de la catégorie.'); return; }
+  const joueurs = $('#e-joueurs').value.split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if (joueurs.length < 2 || joueurs.length > 5) { toast('Il faut de 2 à 5 joueurs, un par ligne.'); return; }
+  if (new Set(joueurs.map(nk)).size !== joueurs.length) { toast('Deux joueurs ont le même nom.'); return; }
+  const toWin = Number(document.querySelector('input[name=towin]:checked').value);
+  const nom = $('#e-nom').value.trim();
+  if (cur.edit) {
+    const p = P();
+    if (Object.keys(p.res).length && (joueurs.length !== p.joueurs.length || toWin !== p.toWin)) {
+      toast('Des parties sont saisies : garde le même nombre de joueurs et le même format.'); return;
+    }
+    // Un nom corrigé emporte sa fiche
+    p.joueurs.forEach((old, i) => {
+      const a = nk(old), b = nk(joueurs[i]);
+      if (a !== b && S.fiches[a] && !S.fiches[b] && !S.poules.some(q => q !== p && q.joueurs.some(j => nk(j) === a))) { S.fiches[b] = S.fiches[a]; delete S.fiches[a]; }
+    });
+    Object.assign(p, { cat, nom, toWin, joueurs });
+    save(); show('poule'); toast('Poule modifiée.');
+  } else {
+    const p = { id: Date.now().toString(36), cat, nom, toWin, joueurs, res: {}, d: today() };
+    S.poules.push(p); S.lastCat = cat; S.lastToWin = toWin;
+    save(); cur.poule = p.id; show('poule');
+  }
+}
+
+// ---------- 3. Une poule ----------
+function renderPoule() {
+  const p = P(), c = classement(p), f = fem(p);
+  $('#p-fmt').textContent = `${p.joueurs.length} joueurs, ${p.toWin} manches gagnantes`;
+  $('#p-title').textContent = titre(p);
+  const tb = $('#p-cl');
+  tb.innerHTML = '';
+  for (const b of c.blocs) for (const i of b) {
+    const t = c.total[i];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="r">${c.joues ? place(c.rang[i], f, b.length > 1) : ''}</td>` +
+      `<td class="n"><button type="button">${esc(p.joueurs[i - 1])}</button> <span class="tag">n° ${i}${t.wo ? ', forfait' : ''}</span></td>` +
+      `<td class="c">${t.v}</td><td class="c">${t.mg}-${t.mp}</td>`;
+    tr.querySelector('button').onclick = () => { cur.joueur = p.joueurs[i - 1]; show('fiche'); };
+    tb.appendChild(tr);
+  }
+  const why = $('#p-why');
+  why.innerHTML = '';
+  if (c.joues < c.nb) {
+    why.innerHTML = `<div class="prov">${c.joues === 0 ? 'Aucune partie saisie.' : `Classement provisoire : ${c.joues} partie${c.joues > 1 ? 's' : ''} sur ${c.nb}.`}</div>`;
+  } else {
+    for (const n of c.notes) {
+      const noms = n.joueurs.map(i => p.joueurs[i - 1]).join(', ');
+      const d = document.createElement('div'); d.className = 'why';
+      d.textContent = n.lib ? `Égalité ${noms} : départagés par ${n.lib}.` : `Égalité parfaite ${noms} : tirage au sort.`;
+      why.appendChild(d);
+    }
+  }
+  const box = $('#p-parties');
+  box.innerHTML = '';
+  let next = null;
+  for (const { a, b, lab } of ordreParties(p.joueurs.length)) {
+    const t = resTexte(p, lab);
+    if (!t && !next) next = lab;
+    const el = document.createElement('button');
+    el.className = 'card' + (t ? '' : ' todo');
+    el.innerHTML = `<span class="lab">${lab}</span><b>${esc(p.joueurs[a - 1])} – ${esc(p.joueurs[b - 1])}</b><small>${t ? esc(t) : 'À saisir'}</small>`;
+    el.onclick = () => { cur.lab = lab; show('saisie'); };
+    box.appendChild(el);
+  }
+  if (next) setMain(`Saisir la partie ${next}`, () => { cur.lab = next; show('saisie'); });
+  else setMain('Retour aux poules', () => show('home'));
+}
+$('#p-edit').onclick = () => openEdit(P());
+twoTaps($('#p-del'), 'Supprimer la poule', () => {
+  S.poules = S.poules.filter(p => p.id !== cur.poule); save(); show('home'); toast('Poule supprimée. Les fiches des joueurs restent.');
+});
+
+// ---------- 4. Saisie d'une partie ----------
+let txt = '';
+const tokens = () => txt.split(',').map(t => t.trim()).filter(t => t !== '' && t !== '-');
+function renderSaisie() {
+  const p = P(), [a, b] = cur.lab.split(' - ').map(Number), r = p.res[cur.lab];
+  $('#s-cat').textContent = `${titre(p)}, ${p.toWin} manches gagnantes`;
+  $('#s-title').textContent = `Partie ${cur.lab}`;
+  $('#s-L').textContent = p.joueurs[a - 1];
+  $('#s-R').textContent = p.joueurs[b - 1];
+  $('#s-woL').textContent = `Forfait de ${p.joueurs[a - 1]}`;
+  $('#s-woR').textContent = `Forfait de ${p.joueurs[b - 1]}`;
+  txt = r && r.m ? r.m.join(', ') : '';
+  $('#s-clear').hidden = !r;
+  drawSaisie();
+}
+function drawSaisie() {
+  const p = P(), [a, b] = cur.lab.split(' - ').map(Number);
+  $('#s-screen').innerHTML = txt ? esc(txt) : '<span class="ph">Écris les manches comme sur la feuille : les points du perdant, avec « − » devant quand le joueur de gauche perd la manche. Exemple : −7, 9, 8.</span>';
+  const t = tokens(), d = lireManches(t, p.toWin);
+  $('#s-sets').innerHTML = d.sets.map((s, i) => `<span class="chip">M${i + 1} : ${s.L}-${s.R}</span>`).join('');
+  const v = $('#s-verdict');
+  if (!t.length) { v.textContent = ''; v.className = 'verdict'; return; }
+  if (d.winner) { v.textContent = `Vainqueur : ${p.joueurs[(d.winner === 'L' ? a : b) - 1]} (${Math.max(d.won.L, d.won.R)}-${Math.min(d.won.L, d.won.R)})`; v.className = 'verdict ok'; }
+  else { v.textContent = d.err; v.className = 'verdict ko'; }
+}
+document.querySelectorAll('#s-pad button').forEach(btn => {
+  btn.onclick = () => {
+    const k = btn.dataset.k;
+    const last = txt.split(',').pop().trim();
+    if (/\d/.test(k)) { if (last.replace('-', '').length >= 2) return; txt += k; }
+    else if (k === '-') { if (last !== '') return; txt += '-'; }
+    else if (k === 'next') { if (!/\d/.test(last)) return; txt += ', '; }
+    else if (k === 'del') { txt = txt.endsWith(', ') ? txt.slice(0, -2) : txt.slice(0, -1); }
+    haptic();
+    drawSaisie();
+  };
+});
+function saveSaisie() {
+  const p = P(), t = tokens(), d = lireManches(t, p.toWin);
+  if (!t.length) { toast('Aucune manche écrite.'); return; }
+  if (d.err) { toast(d.err); return; }
+  p.res[cur.lab] = { m: t };
+  save(); show('poule'); toast(`Partie ${cur.lab} enregistrée.`);
+}
+function setWO(list) {
+  const p = P();
+  p.res[cur.lab] = { wo: list };
+  save(); show('poule'); toast(`Partie ${cur.lab} : forfait enregistré.`);
+}
+$('#s-woL').onclick = () => setWO([Number(cur.lab.split(' - ')[0])]);
+$('#s-woR').onclick = () => setWO([Number(cur.lab.split(' - ')[1])]);
+$('#s-wo2').onclick = () => setWO(cur.lab.split(' - ').map(Number));
+twoTaps($('#s-clear'), 'Effacer le résultat de cette partie', () => {
+  const p = P(); delete p.res[cur.lab]; save(); show('poule'); toast('Résultat effacé.');
+});
+
+// ---------- 5. Fiche d'un joueur ----------
+function fiche(nom) {
+  const k = nk(nom);
+  if (!S.fiches[k]) S.fiches[k] = { nom, service: null, regul: null, grille: {}, travail: [], obs: '' };
+  return S.fiches[k];
+}
+function touch(fi) { fi.d = today(); save(); }
+function dots(box, n0, n1, val, onPick) {
+  box.innerHTML = '';
+  for (let n = n0; n <= n1; n++) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = n; b.className = val === n ? 'on' : '';
+    b.onclick = () => { onPick(val === n ? null : n); };
+    box.appendChild(b);
+  }
+}
+function renderFiche() {
+  const fi = fiche(cur.joueur);
+  $('#f-nom').textContent = cur.joueur;
+  const ou = S.poules.filter(p => p.joueurs.some(j => nk(j) === nk(cur.joueur))).map(titre);
+  $('#f-where').textContent = ou.join(' ; ');
+  dots($('#f-service'), 0, 5, fi.service, v => { fi.service = v; touch(fi); renderFiche(); });
+  $('#f-regul').value = fi.regul == null ? '' : fi.regul;
+  const g = $('#f-grille');
+  g.innerHTML = '';
+  CRIT.forEach((c, i) => {
+    const row = document.createElement('div'); row.className = 'crit';
+    const s = document.createElement('span'); s.textContent = c;
+    const d = document.createElement('div'); d.className = 'dots';
+    dots(d, 1, 4, fi.grille[i] || null, v => { if (v) fi.grille[i] = v; else delete fi.grille[i]; touch(fi); renderFiche(); });
+    row.append(s, d); g.appendChild(row);
+  });
+  const tr = $('#f-travail');
+  tr.innerHTML = '';
+  CRIT.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = c; b.className = fi.travail.includes(i) ? 'on' : '';
+    b.onclick = () => {
+      if (fi.travail.includes(i)) fi.travail = fi.travail.filter(x => x !== i);
+      else if (fi.travail.length >= 2) { toast('Deux points au plus : enlève-en un d\'abord.'); return; }
+      else fi.travail.push(i);
+      touch(fi); renderFiche();
+    };
+    tr.appendChild(b);
+  });
+  $('#f-obs').value = fi.obs || '';
+}
+$('#f-regul').oninput = () => {
+  const fi = fiche(cur.joueur), v = $('#f-regul').value.trim();
+  fi.regul = v === '' ? null : Math.max(0, Math.round(Number(v)));
+  touch(fi);
+};
+$('#f-obs').oninput = () => { const fi = fiche(cur.joueur); fi.obs = $('#f-obs').value; touch(fi); };
+
+// ---------- 6. Bilan ----------
+function bilanTexte() {
+  const d = new Date().toLocaleDateString('fr-FR');
+  let out = `Winners Club, carnet du coach, ${d}\n`;
+  for (const p of S.poules) {
+    const c = classement(p), f = fem(p);
+    out += `\n${titre(p).toUpperCase()} (${p.toWin} manches gagnantes)\n`;
+    out += 'Joueurs : ' + p.joueurs.map((j, i) => `${i + 1}. ${j}`).join('  ') + '\n';
+    for (const { a, b, lab } of ordreParties(p.joueurs.length)) {
+      const t = resTexte(p, lab);
+      out += `${lab}  ${p.joueurs[a - 1]} - ${p.joueurs[b - 1]} : ${t || 'à jouer'}\n`;
+    }
+    if (c.joues) {
+      out += (c.joues < c.nb ? `Classement provisoire (${c.joues}/${c.nb}) : ` : 'Classement : ') +
+        c.blocs.flatMap(b => b.map(i => `${place(c.rang[i], f, b.length > 1)} ${p.joueurs[i - 1]} (${c.total[i].v} v.)`)).join(', ') + '\n';
+      if (c.joues === c.nb) for (const n of c.notes) {
+        out += (n.lib ? `Égalité ${n.joueurs.map(i => p.joueurs[i - 1]).join(', ')} : départagés par ${n.lib}.` : `Égalité parfaite ${n.joueurs.map(i => p.joueurs[i - 1]).join(', ')} : tirage au sort.`) + '\n';
+      }
+    }
+  }
+  const fiches = Object.values(S.fiches).filter(fi => fi.service != null || fi.regul != null || Object.keys(fi.grille).length || fi.travail.length || (fi.obs || '').trim());
+  if (fiches.length) {
+    out += '\nFICHES\n';
+    for (const fi of fiches) {
+      const parts = [];
+      if (fi.service != null) parts.push(`service ${fi.service}/5`);
+      if (fi.regul != null) parts.push(`régularité ${fi.regul} balles`);
+      const g = CRIT.map((c, i) => (fi.grille[i] ? `${c} ${fi.grille[i]}` : null)).filter(Boolean);
+      if (g.length) parts.push('grille : ' + g.join(', '));
+      if (fi.travail.length) parts.push('à travailler : ' + fi.travail.map(i => CRIT[i]).join(', '));
+      if ((fi.obs || '').trim()) parts.push('observation : ' + fi.obs.trim().replace(/\s+/g, ' '));
+      out += `- ${fi.nom} : ${parts.join(' ; ')}\n`;
+    }
+  }
+  return out;
+}
+function renderBilan() {
+  $('#b-text').textContent = bilanTexte();
+  $('#b-share').hidden = !inTg;
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e2) {}
+    ta.remove(); return ok;
+  }
+}
+$('#b-copy').onclick = async () => toast((await copy(bilanTexte())) ? 'Copié. Colle-le dans la discussion avec Jarvis.' : 'Copie impossible sur ce téléphone.');
+// Partage : Telegram ouvre son choix de discussion, on choisit le robot Jarvis
+$('#b-share').onclick = () => tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(bilanTexte()));
+
+// ---------- Démarrage ----------
+show('home');
+</script>
+</body>
+</html>

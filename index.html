@@ -145,6 +145,7 @@
   </div>
 
   <button id="to-list" class="link" hidden></button>
+  <button id="to-carnet" class="ghost">Carnet du coach : poules, classement, fiches</button>
   <p class="note" id="preview-note" hidden>Aperçu hors de Telegram : le bouton du bas et les vibrations remplacent ceux de Telegram.</p>
 </section>
 
@@ -321,6 +322,7 @@ function renderSetup() {
   $('#to-list').textContent = `Résultats enregistrés (${n})`;
 }
 $('#to-list').onclick = () => show('list');
+$('#to-carnet').onclick = () => { location.href = 'carnet.html'; };   // même dépôt, même mini-application
 
 function start() {
   const L = $('#f-L').value.trim(), R = $('#f-R').value.trim();
