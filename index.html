@@ -472,7 +472,7 @@ async function copy(text) {
   }
 }
 $('#l-copy').onclick = async () => toast((await copy(allText())) ? 'Copié. Colle-le où tu veux.' : 'Copie impossible sur ce téléphone.');
-// Partage : Telegram ouvre son choix de discussion (à toi-même, au robot Jarvis, au groupe du club)
+// Partage : Telegram ouvre son choix de discussion (à toi-même, au robot Winners Club, au groupe du club)
 $('#l-share').onclick = () => tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(allText()));
 twoTaps($('#l-clear'), 'Effacer les résultats', () => { S.done = []; save(); show('setup'); toast('Résultats effacés.'); });
 
